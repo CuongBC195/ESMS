@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { compare, hash } from "bcryptjs";
+import { cached, invalidateKey } from "@/lib/redis";
 
 // GET /api/profile — Get current user's profile
 export async function GET() {
@@ -13,28 +14,33 @@ export async function GET() {
     }
 
     try {
-        const user = await prisma.user.findUnique({
-            where: { id: session.user.id },
-            select: {
-                id: true,
-                email: true,
-                role: true,
-                createdAt: true,
-                employee: {
-                    select: {
-                        fullName: true,
-                        maxHoursPerWeek: true,
-                        department: { select: { name: true } },
+        const cacheKey = `profile:${session.user.id}`;
+
+        const data = await cached(cacheKey, async () => {
+            const user = await prisma.user.findUnique({
+                where: { id: session.user.id },
+                select: {
+                    id: true,
+                    email: true,
+                    role: true,
+                    createdAt: true,
+                    employee: {
+                        select: {
+                            fullName: true,
+                            maxHoursPerWeek: true,
+                            department: { select: { name: true } },
+                        },
                     },
                 },
-            },
-        });
+            });
+            return user;
+        }, 60);
 
-        if (!user) {
+        if (!data) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
-        return NextResponse.json(user);
+        return NextResponse.json(data);
     } catch (error) {
         console.error("Failed to fetch profile:", error);
         return NextResponse.json(
@@ -94,6 +100,7 @@ export async function PATCH(request: Request) {
             data: { passwordHash: newHash },
         });
 
+        await invalidateKey(`profile:${session.user.id}`);
         return NextResponse.json({ message: "Password changed successfully" });
     } catch (error) {
         console.error("Failed to change password:", error);

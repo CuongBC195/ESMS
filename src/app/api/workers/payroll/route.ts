@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { invalidateCache } from "@/lib/redis";
 import { differenceInMinutes } from "date-fns";
 import { Receiver } from "@upstash/qstash";
 
@@ -201,6 +202,7 @@ export async function POST(req: Request) {
             }),
         ]);
 
+        await invalidateCache("payroll:");
         console.log(`[PayrollWorker] ✓ Period ${payrollPeriodId} — ${recordsData.length} records created`);
         return NextResponse.json({ success: true, records: recordsData.length });
     } catch (error) {

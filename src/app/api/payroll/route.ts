@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { qstashClient } from "@/lib/qstash";
+import { cached, invalidateCache } from "@/lib/redis";
 import { differenceInMinutes } from "date-fns";
 
 // GET /api/payroll — List payroll periods (role-scoped)
@@ -12,61 +13,65 @@ export async function GET() {
 
     try {
         const role = session.user.role;
+        const cacheKey = `payroll:${role}:${session.user.id}`;
 
-        if (role === "STAFF") {
-            const employee = await prisma.employee.findUnique({ where: { userId: session.user.id } });
-            if (!employee) return NextResponse.json([]);
+        const data = await cached(cacheKey, async () => {
+            if (role === "STAFF") {
+                const employee = await prisma.employee.findUnique({ where: { userId: session.user.id } });
+                if (!employee) return [];
 
-            const records = await prisma.payrollRecord.findMany({
-                where: { employeeId: employee.id },
-                include: {
-                    payrollPeriod: { select: { id: true, startDate: true, endDate: true, status: true, createdAt: true } },
-                },
-                orderBy: { payrollPeriod: { startDate: "desc" } },
-            });
+                const records = await prisma.payrollRecord.findMany({
+                    where: { employeeId: employee.id },
+                    include: {
+                        payrollPeriod: { select: { id: true, startDate: true, endDate: true, status: true, createdAt: true } },
+                    },
+                    orderBy: { payrollPeriod: { startDate: "desc" } },
+                });
 
-            return NextResponse.json(records.map((r: { payrollPeriod: { id: string; startDate: Date; endDate: Date; status: string; createdAt: Date }; totalHours: number; regularHours: number; overtimeHours: number; grossPay: number; deductions: number; netPay: number; shiftsCount: number }) => ({
-                ...r.payrollPeriod,
-                myRecord: {
-                    totalHours: r.totalHours,
-                    regularHours: r.regularHours,
-                    overtimeHours: r.overtimeHours,
-                    grossPay: r.grossPay,
-                    deductions: r.deductions,
-                    netPay: r.netPay,
-                    shiftsCount: r.shiftsCount,
-                },
-            })));
-        }
+                return records.map((r: any) => ({
+                    ...r.payrollPeriod,
+                    myRecord: {
+                        totalHours: r.totalHours,
+                        regularHours: r.regularHours,
+                        overtimeHours: r.overtimeHours,
+                        grossPay: r.grossPay,
+                        deductions: r.deductions,
+                        netPay: r.netPay,
+                        shiftsCount: r.shiftsCount,
+                    },
+                }));
+            }
 
-        // MANAGER / ADMIN
-        if (role === "MANAGER") {
-            const manager = await prisma.employee.findUnique({ where: { userId: session.user.id } });
-            if (!manager) return NextResponse.json([]);
+            if (role === "MANAGER") {
+                const manager = await prisma.employee.findUnique({ where: { userId: session.user.id } });
+                if (!manager) return [];
+                const periods = await prisma.payrollPeriod.findMany({
+                    include: {
+                        records: {
+                            where: { employee: { departmentId: manager.departmentId } },
+                            include: { employee: { select: { fullName: true, department: { select: { name: true } } } } },
+                        },
+                        _count: { select: { records: true } },
+                    },
+                    orderBy: { startDate: "desc" },
+                });
+                return periods.filter((p: any) => p.records.length > 0);
+            }
+
+            // ADMIN
             const periods = await prisma.payrollPeriod.findMany({
                 include: {
                     records: {
-                        where: { employee: { departmentId: manager.departmentId } },
                         include: { employee: { select: { fullName: true, department: { select: { name: true } } } } },
                     },
                     _count: { select: { records: true } },
                 },
                 orderBy: { startDate: "desc" },
             });
-            return NextResponse.json(periods.filter((p: { records: unknown[] }) => p.records.length > 0));
-        }
+            return periods;
+        }, 30);
 
-        // ADMIN: all periods
-        const periods = await prisma.payrollPeriod.findMany({
-            include: {
-                records: {
-                    include: { employee: { select: { fullName: true, department: { select: { name: true } } } } },
-                },
-                _count: { select: { records: true } },
-            },
-            orderBy: { startDate: "desc" },
-        });
-        return NextResponse.json(periods);
+        return NextResponse.json(data);
     } catch (error) {
         console.error("Failed to fetch payroll:", error);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -133,6 +138,8 @@ export async function POST(request: Request) {
                 url: `${baseUrl}/api/workers/payroll`,
                 body: jobPayload,
             });
+
+            await invalidateCache("payroll:");
 
             return NextResponse.json(
                 { id: period.id, status: "DRAFT", message: "Payroll calculation queued" },
@@ -241,6 +248,7 @@ export async function POST(request: Request) {
             },
         });
 
+        await invalidateCache("payroll:");
         return NextResponse.json(updatedPeriod, { status: 201 });
     } catch (error) {
         console.error("Failed to generate payroll:", error);

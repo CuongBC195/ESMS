@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { invalidateCache } from "@/lib/redis";
 
 // GET /api/payroll/[id] — View payroll period with records
 export async function GET(
@@ -109,6 +110,7 @@ export async function PATCH(
                     _count: { select: { records: true } },
                 },
             });
+            await invalidateCache("payroll:");
             return NextResponse.json(updated);
         }
 
@@ -131,6 +133,7 @@ export async function PATCH(
                 data: { deductions, netPay },
                 include: { employee: { select: { fullName: true, department: { select: { name: true } } } } },
             });
+            await invalidateCache("payroll:");
             return NextResponse.json(updated);
         }
 
@@ -166,6 +169,7 @@ export async function DELETE(
         }
 
         await prisma.payrollPeriod.delete({ where: { id } });
+        await invalidateCache("payroll:");
         return NextResponse.json({ message: "Payroll period deleted" });
     } catch (error) {
         console.error("Failed to delete payroll:", error);
