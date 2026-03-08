@@ -149,7 +149,7 @@ export async function GET(request: Request) {
                 return NextResponse.json(cached);
             }
         } catch (_cacheErr: unknown) {
-            console.warn("Redis read failed:", cacheErr);
+            console.warn("Redis read failed:", _cacheErr);
         }
 
         const shifts = await prisma.shift.findMany({
@@ -171,7 +171,7 @@ export async function GET(request: Request) {
         try {
             await redis.set(cacheKey, JSON.stringify(shifts), { ex: 86400 });
         } catch (_cacheErr: unknown) {
-            console.warn("Redis write failed:", cacheErr);
+            console.warn("Redis write failed:", _cacheErr);
         }
 
         return NextResponse.json(shifts);
@@ -366,7 +366,7 @@ export async function POST(request: Request) {
             ];
             if (keys.length > 0) await redis.del(...keys);
         } catch (_cacheErr: unknown) {
-            console.warn("Redis invalidation failed:", cacheErr);
+            console.warn("Redis invalidation failed:", _cacheErr);
         }
 
         return NextResponse.json(shift, { status: 201 });

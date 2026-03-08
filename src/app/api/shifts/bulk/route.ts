@@ -66,7 +66,7 @@ export async function PATCH(request: Request) {
             const keys = await redis.keys("shifts:*");
             if (keys.length > 0) await redis.del(...keys);
         } catch (_cacheErr: unknown) {
-            console.warn("Redis invalidation failed:", cacheErr);
+            console.warn("Redis invalidation failed:", _cacheErr);
         }
 
         return NextResponse.json({

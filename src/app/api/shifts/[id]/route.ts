@@ -25,7 +25,7 @@ async function invalidateShiftCache(departmentId: string) {
         ];
         if (keys.length > 0) await redis.del(...keys);
     } catch (_cacheErr: unknown) {
-        console.warn("Redis invalidation failed:", cacheErr);
+        console.warn("Redis invalidation failed:", _cacheErr);
     }
 }
 
