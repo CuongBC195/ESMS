@@ -139,7 +139,8 @@ export async function PATCH(
         }
 
         // Update employee + user role in a transaction
-        const updated = await prisma.$transaction(async (tx) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const updated = await prisma.$transaction(async (tx: any) => {
             if (role) {
                 const validRoles = ["ADMIN", "MANAGER", "STAFF"];
                 if (!validRoles.includes(role)) {

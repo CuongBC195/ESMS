@@ -131,7 +131,8 @@ export async function POST(request: Request) {
 
         const passwordHash = await hash(password, 12);
 
-        const result = await prisma.$transaction(async (tx) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result = await prisma.$transaction(async (tx: any) => {
             const user = await tx.user.create({
                 data: {
                     email,
