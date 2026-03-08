@@ -7,23 +7,23 @@ const redis = new Redis({
 });
 
 /**
- * Auth limiter — strict, for login/auth endpoints.
- * 5 requests per 60 seconds (sliding window).
+ * Auth limiter — for login/auth endpoints.
+ * 20 requests per 60 seconds (NextAuth makes multiple internal calls per login).
  */
 export const authLimiter = new Ratelimit({
     redis,
-    limiter: Ratelimit.slidingWindow(5, "60 s"),
+    limiter: Ratelimit.slidingWindow(20, "60 s"),
     analytics: false,
     prefix: "rl:auth",
 });
 
 /**
  * API limiter — standard, for all other API endpoints.
- * 30 requests per 10 seconds (sliding window).
+ * 60 requests per 10 seconds (sliding window).
  */
 export const apiLimiter = new Ratelimit({
     redis,
-    limiter: Ratelimit.slidingWindow(30, "10 s"),
+    limiter: Ratelimit.slidingWindow(60, "10 s"),
     analytics: false,
     prefix: "rl:api",
 });
