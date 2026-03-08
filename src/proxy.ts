@@ -13,6 +13,11 @@ export async function proxy(req: NextRequest) {
         return NextResponse.next();
     }
 
+    // Skip auth endpoints — NextAuth makes many internal calls per login
+    if (pathname.startsWith("/api/auth")) {
+        return NextResponse.next();
+    }
+
     // Skip rate limiting in development — Edge Runtime sandbox blocks external fetch
     if (process.env.NODE_ENV === "development") {
         return NextResponse.next();
