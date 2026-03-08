@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
-import { verifySignatureAppRouter } from "@upstash/qstash/nextjs";
 import { prisma } from "@/lib/prisma";
 import { differenceInMinutes } from "date-fns";
+import { Receiver } from "@upstash/qstash";
+
+// Force dynamic — never try to statically analyze this route
+export const dynamic = "force-dynamic";
 
 // ─── OT Rule Types ──────────────────────────────────────
 interface OTRule {
@@ -10,8 +13,44 @@ interface OTRule {
     threshold?: number;
 }
 
-// ─── Worker Logic ────────────────────────────────────────
-async function handler(req: Request) {
+// ─── Runtime signature verification ─────────────────────
+async function verifyQStashSignature(req: Request): Promise<boolean> {
+    const signingKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
+    const nextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
+
+    if (!signingKey || !nextSigningKey) {
+        console.warn("[PayrollWorker] No signing keys — skipping verification (dev mode)");
+        return true; // Allow in dev
+    }
+
+    try {
+        const receiver = new Receiver({
+            currentSigningKey: signingKey,
+            nextSigningKey: nextSigningKey,
+        });
+
+        const body = await req.clone().text();
+        const signature = req.headers.get("upstash-signature") || "";
+
+        await receiver.verify({
+            signature,
+            body,
+        });
+        return true;
+    } catch (err) {
+        console.error("[PayrollWorker] Signature verification failed:", err);
+        return false;
+    }
+}
+
+// ─── POST handler ────────────────────────────────────────
+export async function POST(req: Request) {
+    // Verify QStash signature at runtime
+    const isValid = await verifyQStashSignature(req);
+    if (!isValid) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     try {
         const body = await req.json();
         const { payrollPeriodId, startDate, endDate, otRules, departmentId } = body;
@@ -26,9 +65,9 @@ async function handler(req: Request) {
 
         // Parse OT rules
         const rules: OTRule[] = Array.isArray(otRules) ? otRules : [];
-        const weeklyRule = rules.find((r) => r.type === "WEEKLY_HOURS" && r.enabled);
-        const dailyRule = rules.find((r) => r.type === "DAILY_HOURS" && r.enabled);
-        const lateNightRule = rules.find((r) => r.type === "LATE_NIGHT" && r.enabled);
+        const weeklyRule = rules.find((r: OTRule) => r.type === "WEEKLY_HOURS" && r.enabled);
+        const dailyRule = rules.find((r: OTRule) => r.type === "DAILY_HOURS" && r.enabled);
+        const lateNightRule = rules.find((r: OTRule) => r.type === "LATE_NIGHT" && r.enabled);
 
         const periodDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
         const periodWeeks = Math.max(1, periodDays / 7);
@@ -49,7 +88,6 @@ async function handler(req: Request) {
 
         if (shifts.length === 0) {
             console.warn(`[PayrollWorker] No published shifts for period ${payrollPeriodId}`);
-            // Leave period as DRAFT — admin can see it failed and retry
             return NextResponse.json({ message: "No shifts found, period stays DRAFT" });
         }
 
@@ -152,9 +190,9 @@ async function handler(req: Request) {
             };
         });
 
-        // Batch insert records + update period status in one transaction
+        // Batch insert records + update period status
         await prisma.$transaction([
-            ...recordsData.map((data) =>
+            ...recordsData.map((data: any) =>
                 prisma.payrollRecord.create({ data })
             ),
             prisma.payrollPeriod.update({
@@ -167,11 +205,6 @@ async function handler(req: Request) {
         return NextResponse.json({ success: true, records: recordsData.length });
     } catch (error) {
         console.error("[PayrollWorker] Fatal error:", error);
-        // Period stays DRAFT — admin can see it and retry/delete
         return NextResponse.json({ error: "Worker failed" }, { status: 500 });
     }
 }
-
-// Wrap with QStash signature verification
-// QStash will POST to this endpoint — only verified requests are processed
-export const POST = verifySignatureAppRouter(handler);
