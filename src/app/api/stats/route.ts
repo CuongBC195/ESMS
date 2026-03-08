@@ -37,7 +37,7 @@ export async function GET() {
                     select: { date: true },
                 });
                 const counts = dayNames.map(() => 0);
-                shifts.forEach((s) => {
+                shifts.forEach((s: any) => {
                     const d = new Date(s.date);
                     const idx = (d.getDay() + 6) % 7; // Mon=0 ... Sun=6
                     counts[idx]++;
@@ -79,15 +79,15 @@ export async function GET() {
                 type ActivityItem = { id: string; type: string; user: string; status: string; time: string };
                 const items: ActivityItem[] = [];
 
-                recentRegs.forEach((r) => items.push({
+                recentRegs.forEach((r: any) => items.push({
                     id: r.id, type: "registration", user: r.employee.fullName,
                     status: r.status, time: r.createdAt.toISOString(),
                 }));
-                recentSwaps.forEach((s) => items.push({
+                recentSwaps.forEach((s: any) => items.push({
                     id: s.id, type: "swap", user: s.requesterShift.employee.fullName,
                     status: s.status, time: s.createdAt.toISOString(),
                 }));
-                recentLeaves.forEach((l) => items.push({
+                recentLeaves.forEach((l: any) => items.push({
                     id: l.id, type: "leave", user: l.employee.fullName,
                     status: l.status, time: l.createdAt.toISOString(),
                 }));
@@ -108,7 +108,7 @@ export async function GET() {
                         myShiftsThisWeek: 0,
                         myPendingLeaves: 0,
                         nextShift: null,
-                        weeklyDistribution: dayNames.map((d) => ({ day: d, shifts: 0 })),
+                        weeklyDistribution: dayNames.map((d: string) => ({ day: d, shifts: 0 })),
                     };
                 }
 
@@ -159,7 +159,7 @@ export async function GET() {
                         deptEmployees: 0,
                         deptShiftsThisWeek: 0,
                         deptPendingLeaves: 0,
-                        weeklyDistribution: dayNames.map((d) => ({ day: d, shifts: 0 })),
+                        weeklyDistribution: dayNames.map((d: string) => ({ day: d, shifts: 0 })),
                         recentActivity: [],
                     };
                 }

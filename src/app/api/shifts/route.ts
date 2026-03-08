@@ -148,7 +148,7 @@ export async function GET(request: Request) {
             if (cached) {
                 return NextResponse.json(cached);
             }
-        } catch (cacheErr) {
+        } catch (_cacheErr: unknown) {
             console.warn("Redis read failed:", cacheErr);
         }
 
@@ -170,7 +170,7 @@ export async function GET(request: Request) {
         // Cache for 24h
         try {
             await redis.set(cacheKey, JSON.stringify(shifts), { ex: 86400 });
-        } catch (cacheErr) {
+        } catch (_cacheErr: unknown) {
             console.warn("Redis write failed:", cacheErr);
         }
 
@@ -365,7 +365,7 @@ export async function POST(request: Request) {
                 ...(await redis.keys(allPattern)),
             ];
             if (keys.length > 0) await redis.del(...keys);
-        } catch (cacheErr) {
+        } catch (_cacheErr: unknown) {
             console.warn("Redis invalidation failed:", cacheErr);
         }
 

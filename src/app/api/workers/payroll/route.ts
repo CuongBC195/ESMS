@@ -106,7 +106,7 @@ async function handler(req: Request) {
         const employees = await prisma.employee.findMany({
             where: { id: { in: employeeIds } },
         });
-        const empMap = Object.fromEntries(employees.map((e) => [e.id, e]));
+        const empMap = Object.fromEntries(employees.map((e: any) => [e.id, e]));
 
         // ─── Create PayrollRecords ───────────────────────────
         const recordsData = employeeIds.map((empId) => {

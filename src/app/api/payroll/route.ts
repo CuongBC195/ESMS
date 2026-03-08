@@ -199,7 +199,7 @@ export async function POST(request: Request) {
 
         const employeeIds = Object.keys(employeeData);
         const employees = await prisma.employee.findMany({ where: { id: { in: employeeIds } } });
-        const empMap = Object.fromEntries(employees.map((e) => [e.id, e]));
+        const empMap = Object.fromEntries(employees.map((e: any) => [e.id, e]));
 
         const updatedPeriod = await prisma.payrollPeriod.update({
             where: { id: period.id },

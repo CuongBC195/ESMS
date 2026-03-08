@@ -39,7 +39,7 @@ export async function GET(
         if (session.user.role === "STAFF") {
             const employee = await prisma.employee.findUnique({ where: { userId: session.user.id } });
             if (!employee) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
-            period.records = period.records.filter((r) => r.employeeId === employee.id);
+            period.records = period.records.filter((r: any) => r.employeeId === employee.id);
         }
 
         // MANAGER: filter to their department
@@ -49,7 +49,7 @@ export async function GET(
                 select: { departmentId: true },
             });
             if (manager) {
-                period.records = period.records.filter((r) => {
+                period.records = period.records.filter((r: any) => {
                     // Check department from join
                     return true; // Already filtered at query level above
                 });
