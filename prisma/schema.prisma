@@ -1,0 +1,228 @@
+// ESMS - Employee Scheduling Management System
+// Prisma Schema Definition for Phase 1
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ShiftStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SwapStatus {
+  PENDING_TARGET
+  PENDING_MANAGER
+  APPROVED
+  REJECTED_TARGET
+  REJECTED_MANAGER
+}
+
+enum PayrollStatus {
+  DRAFT
+  CONFIRMED
+  PAID
+}
+
+// ─── Models ──────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(STAFF)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  employee Employee?
+}
+
+model Department {
+  id   String @id @default(uuid())
+  name String
+
+  employees          Employee[]
+  shifts             Shift[]
+  shiftTemplates     ShiftTemplate[]
+  shiftRegistrations ShiftRegistration[]
+}
+
+model Employee {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  departmentId       String
+  fullName           String
+  maxHoursPerWeek    Int      @default(40)
+  hourlyRate         Float    @default(0)
+  overtimeMultiplier Float    @default(1.5)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user               User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department         Department             @relation(fields: [departmentId], references: [id])
+  availabilities     EmployeeAvailability[]
+  leaveRequests      LeaveRequest[]
+  shifts             Shift[]
+  shiftRegistrations ShiftRegistration[]
+  payrollRecords     PayrollRecord[]
+
+  @@index([departmentId])
+}
+
+model EmployeeAvailability {
+  id         String @id @default(uuid())
+  employeeId String
+  dayOfWeek  Int    // 0 = Sunday, 6 = Saturday
+  startTime  String // HH:mm format (e.g. "09:00")
+  endTime    String // HH:mm format (e.g. "17:00")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+}
+
+model LeaveRequest {
+  id         String      @id @default(uuid())
+  employeeId String
+  startDate  DateTime
+  endDate    DateTime
+  reason     String?
+  status     LeaveStatus @default(PENDING)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([status])
+}
+
+model Shift {
+  id              String      @id @default(uuid())
+  departmentId    String
+  employeeId      String
+  date            DateTime
+  startTime       DateTime
+  endTime         DateTime
+  status          ShiftStatus @default(DRAFT)
+  isAutoScheduled Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  department Department @relation(fields: [departmentId], references: [id])
+  employee   Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  swapRequestsAsRequester ShiftSwapRequest[] @relation("swapRequester")
+  swapRequestsAsTarget    ShiftSwapRequest[] @relation("swapTarget")
+
+  @@index([date])
+  @@index([employeeId])
+  @@index([departmentId])
+  @@index([status, date])
+}
+
+model ShiftTemplate {
+  id           String     @id @default(uuid())
+  departmentId String
+  name         String
+  startTime    String     // HH:mm format (e.g. "06:00")
+  endTime      String     // HH:mm format (e.g. "11:00")
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  shiftRegistrations ShiftRegistration[]
+
+  @@index([departmentId])
+}
+
+model ShiftRegistration {
+  id           String             @id @default(uuid())
+  employeeId   String
+  departmentId String
+  date         DateTime
+  templateId   String
+  status       RegistrationStatus @default(PENDING)
+  createdAt    DateTime           @default(now())
+
+  employee   Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  department Department    @relation(fields: [departmentId], references: [id])
+  template   ShiftTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([departmentId])
+  @@index([status])
+}
+
+model ShiftSwapRequest {
+  id               String     @id @default(uuid())
+  requesterShiftId String
+  targetShiftId    String
+  status           SwapStatus @default(PENDING_TARGET)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  requesterShift Shift @relation("swapRequester", fields: [requesterShiftId], references: [id], onDelete: Cascade)
+  targetShift    Shift @relation("swapTarget", fields: [targetShiftId], references: [id], onDelete: Cascade)
+
+  @@index([requesterShiftId])
+  @@index([targetShiftId])
+  @@index([status])
+}
+
+model PayrollPeriod {
+  id        String        @id @default(uuid())
+  startDate DateTime
+  endDate   DateTime
+  status    PayrollStatus @default(DRAFT)
+  createdAt DateTime      @default(now())
+
+  records PayrollRecord[]
+
+  @@index([status])
+}
+
+model PayrollRecord {
+  id              String  @id @default(uuid())
+  payrollPeriodId String
+  employeeId      String
+  totalHours      Float
+  regularHours    Float
+  overtimeHours   Float
+  hourlyRate      Float
+  overtimeRate    Float
+  grossPay        Float
+  deductions      Float   @default(0)
+  netPay          Float
+  shiftsCount     Int
+
+  payrollPeriod PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  employee      Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([payrollPeriodId, employeeId])
+  @@index([employeeId])
+  @@index([payrollPeriodId])
+}
